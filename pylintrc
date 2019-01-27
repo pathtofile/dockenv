@@ -1,0 +1,5 @@
+[MASTER]
+max-line-length=90
+
+[MESSAGES CONTROL]
+disable=logging-fstring-interpolation
