@@ -1,0 +1,115 @@
+version: 2
+jobs:
+  setup-virtualenv:
+    docker:
+      - image: circleci/python:3
+    working_directory: ~/dockenv
+    steps:
+      - checkout
+      - run:
+          name: Setup
+          command: |
+            mkdir -p ./workspace
+            pip3 install virtualenv
+            virtualenv ./workspace/venv
+            source ./workspace/venv/bin/activate
+            pip install -r requirements-build.txt
+      - persist_to_workspace:
+          root: ./workspace
+          paths: venv
+  lint:
+    docker:
+      - image: circleci/python:3
+    working_directory: ~/dockenv
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ./workspace
+      - run:
+          name: Lint check
+          command: | 
+            source ./workspace/venv/bin/activate
+            pylint dockenv tests
+            flake8 dockenv tests
+  test:
+    docker:
+      - image: circleci/python:3
+    working_directory: ~/dockenv
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ./workspace
+      - run:
+          name: Build and install
+          command: | 
+            source ./workspace/venv/bin/activate
+            python setup.py bdist_wheel
+            pip install dist/dockenv_cli-*.whl
+      - run:
+          name: Test
+          command: |
+            source ./workspace/venv/bin/activate
+            pytest tests
+      - store_artifacts:
+          path: ./dist
+      - persist_to_workspace:
+          root: ./
+          paths: dist
+
+  publish-github-release:
+    docker:
+      - image: cibuilds/github:0.10
+    working_directory: ~/dockenv
+    steps:
+      - attach_workspace:
+          at: ./workspace
+      - run:
+          name: "Publish Release on GitHub"
+          command: |
+            ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete ${CIRCLE_TAG} ./workspace/dist/
+
+workflows:
+  version: 2
+  push:
+    jobs:
+      - setup-virtualenv
+      - lint:
+          requires:
+            - setup-virtualenv
+      - test:
+          requires:
+            - setup-virtualenv
+  release:
+    jobs:
+      - setup-virtualenv:
+          filters:
+            tags:
+              only: /.*/
+            branches:
+              ignore: /.*/
+      - lint:
+          requires:
+            - setup-virtualenv
+          filters:
+            tags:
+              only: /.*/
+            branches:
+              ignore: /.*/
+      - test:
+          requires:
+            - setup-virtualenv
+          filters:
+            tags:
+              only: /.*/
+            branches:
+              ignore: /.*/
+      - publish-github-release:
+          requires:
+            - setup-virtualenv
+            - lint
+            - test
+          filters:
+            tags:
+              only: /^\d+\.\d+\.\d+$/
+            branches:
+              ignore: /.*/
