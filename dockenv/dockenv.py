@@ -139,15 +139,16 @@ def run_script(dockenv_name,
     if expose_port:
         expose_script = f"echo [***] Exposed port: $(hostname -i):{expose_port} [***]"
     runner_script = f"""
-    cd runner
     {expose_script}
+    cd ./runner
     python ./{script_filename} {script_args}
     """
 
     with tempfile.TemporaryDirectory() as runner_dir:
         shutil.copy(script_path, runner_dir)
-        with open(os.path.join(runner_dir, "run.sh"), "w") as frunner:
-            frunner.write(runner_script)
+        # Write as bytes so we can force unix endings
+        with open(os.path.join(runner_dir, "run.sh"), "wb") as frunner:
+            frunner.write(runner_script.encode().replace(b"\r\n", b"\n"))
 
         # Create new container to run, mounting our temp dir into it
         try:

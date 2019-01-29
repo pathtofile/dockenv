@@ -92,6 +92,9 @@ script can read from the files inside it:
 dockenv run --mount ./config_dir venv my_script.py
 ## Folder will be mounted in the same root directory as my_script.py
 ```
+*NOTE* On Windows, by default the local folder must be somewhere in your users directory, otherwise
+the folder will be empty inside the virtual environment
+
 
 
 ## Other Commands
