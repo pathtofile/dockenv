@@ -1,0 +1,2 @@
+include pip_freeze.py
+recursive-include scripts *.py Dockerfile
