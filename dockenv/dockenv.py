@@ -202,9 +202,6 @@ def func_new_venv(args):
             with open(os.path.join(build_dir, "package.txt"), "w") as fpackage:
                 fpackage.write(args.package)
 
-        if args.file is not None:
-            shutil.copy(args.file, os.path.join(build_dir, "script.py"))
-
         # It takes a while to build the base Python3 image if we haven't already
         if not local_image_exists("python", tagname="3"):
             LOGGER.info(
@@ -287,13 +284,6 @@ def main():
         "--requirements", "-r", help="requirements.txt file to install first")
     new_parser.add_argument(
         "--package", "-p", help="name of a packge to install from pip first")
-    new_parser.add_argument(
-        "--file", "-f", help="file to run inside container")
-    new_parser.add_argument(
-        "--delete",
-        "-d",
-        action="store_true",
-        help="delete virtualenv after runninng")
     new_parser.add_argument(
         "-v", "--verbose", action="store_true", help="print verbose output")
     new_parser.set_defaults(func=func_new_venv)
