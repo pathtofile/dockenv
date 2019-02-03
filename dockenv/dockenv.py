@@ -99,13 +99,14 @@ def run_script(dockenv_name,
     :param script_path: The path to the script file to run
     :param expose_port: A port to expose on the docker container, so the host can
                         connect to it
-    :param mount: A folder to mount inside the container, so
+    :param mount: A folder to mount inside the container. This can be used to pass
+                  in config files or other data to the script to read
     :param script_args: If not None, an array of arguments to pass into the script
     """
     # Check venv exists:
     if not local_image_exists(dockenv_name):
         venv_name = get_venv_name(dockenv_name)
-        LOGGER.error(f"ERROR: {venv_name} doesn't exist")
+        LOGGER.error(f"ERROR: {venv_name!r} doesn't exist")
         return
 
     cmd = [f"./{os.path.split(script_path)[-1]}"]
@@ -122,11 +123,9 @@ def run_script(dockenv_name,
     cd ./runner
     python {cmd_quoted}
     """
-    print(runner_script)
 
     with tempfile.TemporaryDirectory() as runner_dir:
         shutil.copy(script_path, runner_dir)
-        # Write as bytes so we can force unix endings
         with open(
                 os.path.join(runner_dir, "run.sh"), "w",
                 newline="\n") as frunner:
@@ -154,7 +153,7 @@ def run_script(dockenv_name,
             # amout of information that is printed out by the running container
             LOGGER.debug(traceback.format_exc())
             LOGGER.error("\nERROR: Script completed with error! "
-                         "Use `dockenv run --verbose` to get more info")
+                         "Use 'dockenv run --verbose' to get more info")
 
 
 def func_new_venv(args):
@@ -167,8 +166,8 @@ def func_new_venv(args):
     dockenv_name = f"dockenv-{args.envname}"
     # Check env doesn't already exist:
     if local_image_exists(dockenv_name):
-        LOGGER.error(f"ERROR: Virtual Env `{args.envname}` already exists! "
-                     "Use `dockenv delete` or `dockenv run`")
+        LOGGER.error(f"ERROR: Virtual Env {args.envname!r} already exists! "
+                     "Use 'dockenv delete' or 'dockenv run'")
         return
 
     # Put everything inside a temp directory
@@ -257,7 +256,7 @@ def func_delete_venv(args):
 
     # Check env exists:
     if not local_image_exists(dockenv_name):
-        LOGGER.error(f"ERROR: Virtual Env `{args.envname}` doesn't exist")
+        LOGGER.error(f"ERROR: Virtual Env {args.envname!r} doesn't exist")
         return
 
     # First force-stop any running containers that start with venv_name
