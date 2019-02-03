@@ -9,6 +9,7 @@ import tempfile
 import subprocess
 import logging
 import traceback
+import shlex
 import docker
 
 ROOT_FOLDER = os.path.abspath(os.path.dirname(__file__))
@@ -36,6 +37,7 @@ def get_venv_name(dockenv_name):
     """
     Helper function to split the user-defined virtual env name
     out of the full name that includes the dockenv tag
+
     :param dockenv_name: The full name to pull the virtual env name
                          out of
     """
@@ -70,7 +72,7 @@ def get_local_container(venv_name, tagname="latest"):
 
     However as Dockenv only operates on the local
     level, calling out to a remote site is reduntant at best, and a potential security
-    risk at worse, as the name may contain sensitive information, and would open
+    risk at worst, as the name may contain sensitive information, and would open
     the user to an attack where a malicious user uploads their own container matching
     the name to the registry.
 
@@ -84,46 +86,21 @@ def get_local_container(venv_name, tagname="latest"):
     return None
 
 
-def delete_env(name, logger_func=LOGGER.info):
-    """
-    Delete Docker container or Image that matches name
-    :param name: The name of the container and image to delete.
-    :logger_func: To be used to determine if we should log at info or debug levels
-    """
-    # Check env exists:
-    if not local_image_exists(name):
-        venv_name = get_venv_name(name)
-        LOGGER.error(f"ERROR: Virtual Env `{venv_name}` doesn't exist")
-        return
-
-    # Attempt to delete running container
-    try:
-        logger_func(f"[*] deleting container {name}")
-        container = get_local_container(name)
-        if container is not None:
-            container.remove(force=True)
-    except docker.errors.NotFound:
-        pass
-
-    # Also attempt to delete the image
-    try:
-        logger_func(f"[*] deleting image {name}")
-        CLIENT.images.remove(name)
-    except docker.errors.ImageNotFound:
-        pass
-
-
 def run_script(dockenv_name,
                script_path,
                expose_port=None,
                mount=None,
-               arguments=None):
+               script_args=None):
     """
     Run a script inside a virtual env. This will build the new image that includes
     the the script file. It will then run the script passing in the args
+
     :param dockenv_name: The full name of the image to create
     :param script_path: The path to the script file to run
-    :param arguments: If not None, an array of arguments to pass into the script
+    :param expose_port: A port to expose on the docker container, so the host can
+                        connect to it
+    :param mount: A folder to mount inside the container, so
+    :param script_args: If not None, an array of arguments to pass into the script
     """
     # Check venv exists:
     if not local_image_exists(dockenv_name):
@@ -131,24 +108,29 @@ def run_script(dockenv_name,
         LOGGER.error(f"ERROR: {venv_name} doesn't exist")
         return
 
-    script_filename = os.path.split(script_path)[-1]
-    script_args = ""
-    if not arguments:
-        script_args = " ".join(arguments)
+    cmd = [f"./{os.path.split(script_path)[-1]}"]
+
+    if script_args:
+        cmd += script_args
     expose_script = ""
     if expose_port:
         expose_script = f"echo [***] Exposed port: $(hostname -i):{expose_port} [***]"
+
+    cmd_quoted = " ".join(shlex.quote(x) for x in cmd)
     runner_script = f"""
     {expose_script}
     cd ./runner
-    python ./{script_filename} {script_args}
+    python {cmd_quoted}
     """
+    print(runner_script)
 
     with tempfile.TemporaryDirectory() as runner_dir:
         shutil.copy(script_path, runner_dir)
         # Write as bytes so we can force unix endings
-        with open(os.path.join(runner_dir, "run.sh"), "wb") as frunner:
-            frunner.write(runner_script.encode().replace(b"\r\n", b"\n"))
+        with open(
+                os.path.join(runner_dir, "run.sh"), "w",
+                newline="\n") as frunner:
+            frunner.write(runner_script)
 
         # Create new container to run, mounting our temp dir into it
         try:
@@ -179,6 +161,7 @@ def func_new_venv(args):
     """
     Create a new virtual env. This will build a Docker image based on the
     "Python:3" image. Our Image will be named named "dockenv-<envname>"
+
     :param args: cli arguments
     """
     dockenv_name = f"dockenv-{args.envname}"
@@ -218,6 +201,7 @@ def func_run_script(args):
     """
     Run a script inside a virtual env. This will build and create a container
     based on an image named "dockenv-<envname>"
+
     :param args: cli arguments
     """
     # Create a new container on top of the virtual env one
@@ -227,7 +211,7 @@ def func_run_script(args):
         args.script,
         expose_port=args.port,
         mount=args.mount,
-        arguments=args.arguments)
+        script_args=args.arguments)
 
 
 # pylint: disable=W0613
@@ -235,6 +219,7 @@ def func_list_venv(args):
     """
     List all virtual envs. This will list all images that
     match the name "dockenv-<envname>"
+
     :param args: cli arguments, ignored.
     """
     LOGGER.info("Dockenv virtual envs:")
@@ -251,6 +236,7 @@ def func_freeze_venv(args):
     will run "pip freeze" inside the container.
     Like "dockenv run" this will create a container based on an
     image named "dockenv-<envname>"
+
     :param args: cli arguments
     """
     # Create a new container on top of the virtual env one
@@ -264,10 +250,26 @@ def func_delete_venv(args):
     Delete a virtual environment.
     This will remove both containers and images that match the
     name "dockenv-<envname>"
+
     :param args: cli arguments
     """
     dockenv_name = f"dockenv-{args.envname}"
-    delete_env(dockenv_name)
+
+    # Check env exists:
+    if not local_image_exists(dockenv_name):
+        LOGGER.error(f"ERROR: Virtual Env `{args.envname}` doesn't exist")
+        return
+
+    # First force-stop any running containers that start with venv_name
+    for container in CLIENT.containers.list():
+        for tag in container.image.tags:
+            if tag.startswith(dockenv_name):
+                LOGGER.info(f"[*] deleting container {dockenv_name}")
+                container.remove(force=True)
+
+    # Then delete the image
+    LOGGER.info(f"[*] deleting image {dockenv_name}")
+    CLIENT.images.remove(dockenv_name)
 
 
 def main():
@@ -296,18 +298,21 @@ def main():
         "envname", help="name of the virtualenv to run script in")
     run_parser.add_argument("script", help="script to run")
     run_parser.add_argument(
-        "arguments", nargs="*", help="arguments to pass into script")
-    run_parser.add_argument(
         "-v", "--verbose", action="store_true", help="print verbose output")
     run_parser.add_argument(
         "-e",
         "--expose-port",
+        type=int,
         dest="port",
         help="Expose a network port on the container")
     run_parser.add_argument(
         "-m",
         "--mount",
         help="Mount a folder into the working directory of the container")
+    run_parser.add_argument(
+        "arguments",
+        nargs=argparse.REMAINDER,
+        help="arguments to pass into script")
     run_parser.set_defaults(func=func_run_script)
 
     # --- List Virtual Envs ---

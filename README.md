@@ -35,9 +35,9 @@ pip install dockenv
 
 ## From source
 ```
-git clone git@github.com:pathtofil
-python setup.py bdist_wheel
-pip install dist\dockenv-*.whl
+git clone git@github.com:pathtofile/dockenv.git
+cd dockenv
+python -m dockenv
 ```
 
 # How To use examples

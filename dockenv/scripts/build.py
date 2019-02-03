@@ -14,10 +14,8 @@ def main():
             ['pip', 'install', '--no-cache-dir', '-r', 'requirements.txt'])
 
     if os.path.exists('package.txt'):
-        with open('package.txt', 'r') as f:
-            package_name = f.read().strip()
-            subprocess.check_call(
-                ['pip', 'install', '--no-cache-dir', package_name])
+        subprocess.check_call(
+            ['pip', 'install', '--no-cache-dir', '-r', 'package.txt'])
 
 
 if __name__ == "__main__":
