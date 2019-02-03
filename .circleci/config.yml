@@ -29,8 +29,8 @@ jobs:
           name: Lint check
           command: | 
             source ./workspace/venv/bin/activate
-            pylint dockenv tests
-            flake8 dockenv tests
+            pylint dockenv/dockenv.py tests
+            flake8 dockenv/dockenv.py tests
   test:
     docker:
       - image: circleci/python:3
