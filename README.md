@@ -11,15 +11,15 @@ This project aims to make it easy to test and run untrusted python code safely.
 
 
 # Installation
-## 1. Install docker
+## 1. Install docker and Python >= 3.6
 On Ubuntu/Debian:
 ```
-apt-get install docker
+apt-get install python3.6 docker
 ```
 
 On Centos/Fedora/Redhat:
 ```
-yum install docker
+yum install python3.6 docker
 ```
 
 On Windows, I reccomend using the legacy docker-toolbox: https://docs.docker.com/toolbox/toolbox_install_windows/
@@ -36,8 +36,7 @@ pip install dockenv
 ## From source
 ```
 git clone git@github.com:pathtofile/dockenv.git
-cd dockenv
-python -m dockenv
+pip install ./dockenv
 ```
 
 # How To use examples
@@ -136,3 +135,10 @@ If you install a malicious package, it will be able to see any files you put int
 anything else you type or pass into it. However, the malicious code will not be able to see anything outside the
 environment, and it will only run for the lifetime of `dockenv run`.
 
+
+
+
+## Containers aren't compleltly infaliable
+Unlike Virtual Machines, docker containers share parts of your host's operating system in order to do some low-level things. But there is a strong sepearation between the Container and the Host, that will prevent the majority of malicious code from being able to breach the gap and read or alter data on your host machine.
+
+However, a particularly nasty and persistant actor could still find a way to break out of the container, so be warned if you feel you may be targeted by such theats.

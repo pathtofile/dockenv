@@ -1,5 +1,5 @@
 """
-Dockeenv - Run untrusted python in Docker
+Dockenv - Run untrusted python in Docker
 """
 import argparse
 import os

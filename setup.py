@@ -20,4 +20,6 @@ setup(
         ],
     },
     include_package_data=True,
-    install_requires=["docker"])
+    install_requires=["docker"],
+    python_requires=">=3.6"
+    )
