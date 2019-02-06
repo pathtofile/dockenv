@@ -2,7 +2,7 @@
 Test dockenv
 """
 from unittest.mock import patch
-from mocked_types import MockedImage
+from .mocked_types import MockedImage
 from dockenv import dockenv
 
 
