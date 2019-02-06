@@ -478,7 +478,7 @@ def main():
     # --- Debug Shell Script ---
     shell_parser = subparsers.add_parser(
         "shell",
-        help="Start a debug bash shell inside the env. FOR ADVANCED USERS ONLY! "
+        help="FOR ADVANCED USERS ONLY! Start a debug shell inside the env. "
         "Anything you do in this shell will be blown away once you quit")
     shell_parser.add_argument(
         "envname", help="name of the virtualenv to start the shell in")

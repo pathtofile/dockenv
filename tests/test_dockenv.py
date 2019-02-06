@@ -2,8 +2,8 @@
 Test dockenv
 """
 from unittest.mock import patch
-from .mocked_types import MockedImage
 from dockenv import dockenv
+from .mocked_types import MockedImage
 
 
 def test_get_venv_name_nolatest():
