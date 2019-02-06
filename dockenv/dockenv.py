@@ -157,14 +157,14 @@ def run_script(dockenv_name,
 
 def build_venv(args, upgrade=False):
     """
-    Create a new virtual env or upgrade an existing one. If new, this will
-    build a Docker image based on the "Python:3" image, and our Image will
-    be named named "dockenv-<envname>". If upgrading, we will build from a
-    base image of the same name
+    Create a new virtual env or upgrade an existing one.
+    If new, this will build a Docker image based on the "Python:3" image,
+    and our Image will be named named "dockenv-<envname>".
+    If upgrading, we will build from a base image of the same name
 
     :param args: cli args
     :param upgrade: If True, base image will be the same dockenv image.
-                   If False, base image will be "python:3"
+                    If False, base image will be "python:3"
     """
     dockenv_name = f"dockenv-{args.envname}"
 
@@ -222,9 +222,9 @@ def build_venv(args, upgrade=False):
                 f"[*] First time using dockenv, may take some extra time")
 
         # Build the container
-        LOGGER.info(f"[*] building virtual env {dockenv_name}...")
+        LOGGER.info(f"[*] building virtual env {dockenv_name!r}...")
         CLIENT.images.build(tag=dockenv_name, path=build_dir)
-        LOGGER.info(f"[*] built virtual env {dockenv_name}")
+        LOGGER.info(f"[*] built virtual env {dockenv_name!r}")
 
 
 def func_new_venv(args):
@@ -254,7 +254,7 @@ def func_run_script(args):
 
     :param args: cli arguments
     """
-    # Create a new container on top of the virtual env one
+    # Create a new container on top of the virtual env image
     dockenv_name = f"dockenv-{args.envname}"
     run_script(
         dockenv_name,
@@ -262,6 +262,26 @@ def func_run_script(args):
         expose_port=args.port,
         mount=args.mount,
         script_args=args.arguments)
+
+
+def func_run_shell(args):
+    """
+    Launch a shell inside a virtual env. This will build and create a container
+    based on an image named "dockenv-<envname>"
+
+    :param args: cli arguments
+    """
+    dockenv_name = f"dockenv-{args.envname}"
+    with tempfile.TemporaryDirectory() as runner_dir:
+        shell_fname = os.path.join(runner_dir, "shell.py")
+        with open(shell_fname, "w", newline="\n") as fshell:
+            fshell.write("import pty; pty.spawn('/bin/bash')")
+        LOGGER.info(f"[*] Starting shell in {dockenv_name!r}")
+        LOGGER.info(
+            f"[*] NOTE: ANYTHING you do inside the container will be blown")
+        LOGGER.info(f"[*] away once you quit. This is only for debugging!")
+        run_script(
+            dockenv_name, shell_fname, expose_port=args.port, mount=args.mount)
 
 
 # pylint: disable=W0613
@@ -314,11 +334,11 @@ def func_delete_venv(args):
     for container in CLIENT.containers.list():
         for tag in container.image.tags:
             if tag.startswith(dockenv_name):
-                LOGGER.info(f"[*] deleting container {dockenv_name}")
+                LOGGER.info(f"[*] deleting container {dockenv_name!r}")
                 container.remove(force=True)
 
     # Then delete the image
-    LOGGER.info(f"[*] deleting image {dockenv_name}")
+    LOGGER.info(f"[*] deleting image {dockenv_name!r}")
     CLIENT.images.remove(dockenv_name)
 
 
@@ -454,6 +474,25 @@ def main():
     import_parser.add_argument(
         "filename", help="file to save the virtualenv to")
     import_parser.set_defaults(func=func_import_venv)
+
+    # --- Debug Shell Script ---
+    shell_parser = subparsers.add_parser(
+        "shell",
+        help="Start a debug bash shell inside the env. FOR ADVANCED USERS ONLY! "
+        "Anything you do in this shell will be blown away once you quit")
+    shell_parser.add_argument(
+        "envname", help="name of the virtualenv to start the shell in")
+    shell_parser.add_argument(
+        "-e",
+        "--expose-port",
+        type=int,
+        dest="port",
+        help="Expose a network port on the container")
+    shell_parser.add_argument(
+        "-m",
+        "--mount",
+        help="Mount a folder into the working directory of the container")
+    shell_parser.set_defaults(func=func_run_shell)
 
     if len(sys.argv) == 1:
         parser.print_help()
