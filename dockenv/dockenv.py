@@ -62,7 +62,6 @@ def local_image_exists(image_name, tagname="latest"):
                 return True
     return False
 
-
 def get_local_container(venv_name, tagname="latest"):
     """
     Get a Docker container object, but only if we have it locally.
@@ -84,11 +83,13 @@ def get_local_container(venv_name, tagname="latest"):
         return CLIENT.containers.get(venv_name)
     return None
 
-
+# pylint: disable=too-many-arguments, too-many-locals
 def run_script(dockenv_name,
                script_path,
                expose_port=None,
                mount=None,
+               write_filesystem=False,
+               write_mount=False,
                script_args=None):
     """
     Run a script inside a virtual env. This will build the new image that includes
@@ -100,6 +101,8 @@ def run_script(dockenv_name,
                         connect to it
     :param mount: A folder to mount inside the container. This can be used to pass
                   in config files or other data to the script to read
+    :param write_filesystem: If True, allow script to write to conainer's filesystem
+    :param write_mount: If True, allow script to write to the mounted folder
     :param script_args: If not None, an array of arguments to pass into the script
     """
     # Check venv exists:
@@ -134,17 +137,25 @@ def run_script(dockenv_name,
         try:
             args = ["docker", "run", "-ti", "--rm"]
             # mount temp dir into container
-            args += ["-v", f"{get_posix_path(runner_dir)}:/usr/src/app/runner"]
+            vol_cmd = f"{get_posix_path(runner_dir)}:/usr/src/app/runner"
+            if write_filesystem:
+                args += ["-v", vol_cmd]
+            else:
+                args += ["-v", f"{vol_cmd}:ro"]
+                args += ["--read-only"]
+
             if expose_port:
                 args += ["--expose", expose_port]
 
             if mount:
                 src_abs = os.path.abspath(mount)
                 dest_folder = os.path.split(src_abs)[-1]
-                args += [
-                    "-v",
-                    f"{get_posix_path(src_abs)}:/usr/src/app/runner/{dest_folder}"
-                ]
+                args += ["-v"]
+                mount_cmd = f"{get_posix_path(src_abs)}:/usr/src/app/{dest_folder}"
+                if write_mount:
+                    args += [mount_cmd]
+                else:
+                    args += [f"{mount_cmd}:ro"]
             args += [dockenv_name]
             subprocess.check_call(args)
         except subprocess.CalledProcessError:
@@ -152,7 +163,7 @@ def run_script(dockenv_name,
             # amout of information that is printed out by the running container
             LOGGER.debug(traceback.format_exc())
             LOGGER.error("\nERROR: Script completed with error! "
-                         "Use 'dockenv run --verbose' to get more info")
+                         "Use 'dockenv --verbose run' to get more info")
 
 
 def build_venv(args, upgrade=False):
@@ -183,17 +194,24 @@ def build_venv(args, upgrade=False):
         LOGGER.error(f"ERROR: Use only one of '--package' or '--requirements'")
         return
 
+    # If a new env, we need to setup the user permissions
     if upgrade:
-        base_image = dockenv_name
+        base_script = f"""
+        FROM {dockenv_name}
+        """
     else:
-        base_image = "python:3"
+        base_script = """
+        FROM python:3
+        RUN groupadd -r dockenv && useradd -m -r -g dockenv dockenv
+        """
 
     pip_script = ""
     if args.requirements or args.package:
-        pip_script = "RUN pip install --no-cache-dir -r requirements.txt"
+        pip_script = "RUN pip install --no-cache-dir --user -r requirements.txt"
 
     dockerfile = f"""
-    FROM {base_image}
+    {base_script}
+    USER dockenv
     WORKDIR /usr/src/app
     COPY . .
     {pip_script}
@@ -261,6 +279,8 @@ def func_run_script(args):
         args.script,
         expose_port=args.port,
         mount=args.mount,
+        write_mount=args.write_mount,
+        write_filesystem=args.write_filesystem,
         script_args=args.arguments)
 
 
@@ -280,8 +300,14 @@ def func_run_shell(args):
         LOGGER.info(
             f"[*] NOTE: ANYTHING you do inside the container will be blown")
         LOGGER.info(f"[*] away once you quit. This is only for debugging!")
+        # As this is for debugging, we'll always run with a writable filesystem
         run_script(
-            dockenv_name, shell_fname, expose_port=args.port, mount=args.mount)
+            dockenv_name,
+            shell_fname,
+            expose_port=args.port,
+            mount=args.mount,
+            write_mount=True,
+            write_filesystem=True)
 
 
 # pylint: disable=W0613
@@ -434,7 +460,21 @@ def main():
     run_parser.add_argument(
         "-m",
         "--mount",
-        help="Mount a folder into the working directory of the container")
+        help=("Mount a folder inside the container "
+              "to '/usr/src/app/<folder_name>'"))
+    run_parser.add_argument(
+        "-wm",
+        "--writeable-mount",
+        action="store_true",
+        dest="write_mount",
+        help="Allow script to write data into the mount")
+    run_parser.add_argument(
+        "-wf",
+        "--writeable-filesystem",
+        action="store_true",
+        dest="write_filesystem",
+        help="Allow script to write data anywhere in the env's own filesystem"
+    )
     run_parser.add_argument(
         "arguments",
         nargs=argparse.REMAINDER,
