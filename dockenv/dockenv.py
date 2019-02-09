@@ -62,6 +62,7 @@ def local_image_exists(image_name, tagname="latest"):
                 return True
     return False
 
+
 def get_local_container(venv_name, tagname="latest"):
     """
     Get a Docker container object, but only if we have it locally.
@@ -82,6 +83,7 @@ def get_local_container(venv_name, tagname="latest"):
     if local_image_exists(venv_name, tagname=tagname):
         return CLIENT.containers.get(venv_name)
     return None
+
 
 # pylint: disable=too-many-arguments, too-many-locals
 def run_script(dockenv_name,
