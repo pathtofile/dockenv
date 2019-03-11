@@ -3,8 +3,8 @@
 Installation
 ============
 
-1. Install Docker
------------------
+1. Install Python >= 3.6 and Docker
+-----------------------------------
 
 On Ubuntu/Debian/Kali Linux:
 
