@@ -86,8 +86,10 @@ def get_local_container(venv_name, tagname="latest"):
 
 
 # pylint: disable=too-many-arguments, too-many-locals
+# pylint: disable=too-many-branches, too-many-statements
 def run_script(dockenv_name,
-               script_path,
+               script,
+               as_module=False,
                expose_port=None,
                mount=None,
                write_filesystem=False,
@@ -99,6 +101,8 @@ def run_script(dockenv_name,
 
     :param dockenv_name: The full name of the image to create
     :param script_path: The path to the script file to run
+    :param as_module: If True, script is not a file on disk, but a python module
+                      to run with 'python -m'
     :param expose_port: A port to expose on the docker container, so the host can
                         connect to it
     :param mount: A folder to mount inside the container. This can be used to pass
@@ -113,15 +117,19 @@ def run_script(dockenv_name,
         LOGGER.error(f"ERROR: {venv_name!r} doesn't exist")
         return
 
-    cmd = [f"./{os.path.split(script_path)[-1]}"]
+    if as_module:
+        cmd = ["-m", f"{script}"]
+    else:
+        cmd = [f"./{os.path.split(script)[-1]}"]
 
     if script_args:
         cmd += script_args
+    cmd_quoted = " ".join(shlex.quote(x) for x in cmd)
+
     expose_script = ""
     if expose_port:
         expose_script = f"echo [***] Exposed port: $(hostname -i):{expose_port} [***]"
 
-    cmd_quoted = " ".join(shlex.quote(x) for x in cmd)
     runner_script = f"""
     {expose_script}
     cd ./runner
@@ -129,7 +137,8 @@ def run_script(dockenv_name,
     """
 
     with tempfile.TemporaryDirectory() as runner_dir:
-        shutil.copy(script_path, runner_dir)
+        if not as_module:
+            shutil.copy(script, runner_dir)
         with open(
                 os.path.join(runner_dir, "run.sh"), "w",
                 newline="\n") as frunner:
@@ -200,16 +209,21 @@ def build_venv(args, upgrade=False):
     if upgrade:
         base_script = f"""
         FROM {dockenv_name}
+        RUN python -m pip install --upgrade pip
         """
     else:
         base_script = """
         FROM python:3
+        RUN python -m pip install --upgrade pip
         RUN groupadd -r dockenv && useradd -m -r -g dockenv dockenv
         """
 
     pip_script = ""
     if args.requirements or args.package:
         pip_script = "RUN pip install --no-cache-dir --user -r requirements.txt"
+
+    if args.extra_pip_arguments:
+        pip_script += " " + " ".join(args.extra_pip_arguments)
 
     dockerfile = f"""
     {base_script}
@@ -243,7 +257,14 @@ def build_venv(args, upgrade=False):
 
         # Build the container
         LOGGER.info(f"[*] building virtual env {dockenv_name!r}...")
-        CLIENT.images.build(tag=dockenv_name, path=build_dir)
+        # NOTE: I didn't see how to get 'CLIENT.images.build'
+        # to actually print what it is doing, leading this to "hang" with no output
+        # Switched to calling subprocess so user gets feedback on whats going on
+        if args.verbose:
+            subprocess.check_call(
+                ["docker", "build", "-t", dockenv_name, build_dir])
+        else:
+            CLIENT.images.build(tag=dockenv_name, path=build_dir)
         LOGGER.info(f"[*] built virtual env {dockenv_name!r}")
 
 
@@ -279,6 +300,7 @@ def func_run_script(args):
     run_script(
         dockenv_name,
         args.script,
+        as_module=args.as_module,
         expose_port=args.port,
         mount=args.mount,
         write_mount=args.write_mount,
@@ -328,7 +350,7 @@ def func_list_venv(args):
                 LOGGER.info(f"  {venv_name}")
 
 
-def func_freeze_venv(args):
+def func_run_freeze(args):
     """
     This will call "dockenv run" calling a special script that
     will run "pip freeze" inside the container.
@@ -337,10 +359,14 @@ def func_freeze_venv(args):
 
     :param args: cli arguments
     """
-    # Create a new container on top of the virtual env one
     dockenv_name = f"dockenv-{args.envname}"
-    freeze_script = os.path.join(ROOT_FOLDER, "pip_freeze.py")
-    run_script(dockenv_name, freeze_script)
+    with tempfile.TemporaryDirectory() as runner_dir:
+        freeze_fname = os.path.join(runner_dir, "freeze.py")
+        with open(freeze_fname, "w", newline="\n") as ffreeze:
+            ffreeze.write(
+                "import subprocess; subprocess.run('pip freeze', shell=True)")
+        # Pip freeze needs write access to the container's /tmp for some reason...
+        run_script(dockenv_name, freeze_fname, write_filesystem=True)
 
 
 def func_delete_venv(args):
@@ -367,7 +393,7 @@ def func_delete_venv(args):
 
     # Then delete the image
     LOGGER.info(f"[*] deleting image {dockenv_name!r}")
-    CLIENT.images.remove(dockenv_name)
+    CLIENT.images.remove(dockenv_name, force=True)
 
 
 def func_export_venv(args):
@@ -432,6 +458,10 @@ def main():
         "--requirements", "-r", help="requirements.txt file to install first")
     new_parser.add_argument(
         "--package", "-p", help="name of a packge to install from pip first")
+    new_parser.add_argument(
+        "extra_pip_arguments",
+        nargs=argparse.REMAINDER,
+        help="after envname, any extra arguments to pass to pip")
     new_parser.set_defaults(func=func_new_venv)
 
     # --- Upgrade virtual Env ---
@@ -445,6 +475,10 @@ def main():
         help="requirements.txt file to install into virtualenv")
     upgrade_parser.add_argument(
         "--package", "-p", help="name of a packge to install into virtualenv")
+    upgrade_parser.add_argument(
+        "extra_pip_arguments",
+        nargs=argparse.REMAINDER,
+        help="after envname, any extra arguments to pass to pip")
     upgrade_parser.set_defaults(func=func_upgrade_venv)
 
     # --- Run Script ---
@@ -452,7 +486,14 @@ def main():
         "run", help="run script inside an existing virtual env")
     run_parser.add_argument(
         "envname", help="name of the virtualenv to run script in")
-    run_parser.add_argument("script", help="script to run")
+    run_parser.add_argument("script", help="path to script to run")
+    run_parser.add_argument(
+        "-am",
+        "--as-module",
+        action="store_true",
+        dest="as_module",
+        help=("If set, script is not a file on disk, "
+              "but a name of a python module"))
     run_parser.add_argument(
         "-e",
         "--expose-port",
@@ -475,8 +516,7 @@ def main():
         "--writeable-filesystem",
         action="store_true",
         dest="write_filesystem",
-        help="Allow script to write data anywhere in the env's own filesystem"
-    )
+        help="Allow script to write data anywhere in the env's own filesystem")
     run_parser.add_argument(
         "arguments",
         nargs=argparse.REMAINDER,
@@ -493,7 +533,7 @@ def main():
         "freeze", help="list packages inside an environment")
     freeze_parser.add_argument(
         "envname", help="name of the virtualenv to list packges in")
-    freeze_parser.set_defaults(func=func_freeze_venv)
+    freeze_parser.set_defaults(func=func_run_freeze)
 
     # --- Delete Virtual Env ---
     del_parser = subparsers.add_parser(
