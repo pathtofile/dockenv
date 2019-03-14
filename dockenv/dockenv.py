@@ -209,6 +209,7 @@ def build_venv(args, upgrade=False):
     if upgrade:
         base_script = f"""
         FROM {dockenv_name}
+        USER root
         RUN python -m pip install --upgrade pip
         """
     else:

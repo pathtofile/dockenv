@@ -9,6 +9,14 @@ Short param names
 Every param and flag has a short name. run :code:`dockenv -h` or  :code:`dockenv <command> -h`
 to get the list.
 
+Verbose
+-----------------
+
+Start every command with :code:`dockenv -v` or :code:`dockenv --verbose` to get
+verbose output. This can be particularly useful when creating or upgrading envs,
+as this will print out all stdout and stderr from docker, including from the image
+
+
 Configuring pip install
 -----------------------
 
