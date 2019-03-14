@@ -222,6 +222,9 @@ def build_venv(args, upgrade=False):
     if args.requirements or args.package:
         pip_script = "RUN pip install --no-cache-dir --user -r requirements.txt"
 
+    if not args.allow_nonbinary:
+        pip_script += " --only-binary=:all:"
+
     if args.extra_pip_arguments:
         pip_script += " " + " ".join(args.extra_pip_arguments)
 
@@ -459,6 +462,12 @@ def main():
     new_parser.add_argument(
         "--package", "-p", help="name of a packge to install from pip first")
     new_parser.add_argument(
+        "-anb",
+        "--allow-nonbinary",
+        action="store_true",
+        dest="allow_nonbinary",
+        help="If not set, pip will be run with '--only-binary=:all:'")
+    new_parser.add_argument(
         "extra_pip_arguments",
         nargs=argparse.REMAINDER,
         help="after envname, any extra arguments to pass to pip")
@@ -475,6 +484,12 @@ def main():
         help="requirements.txt file to install into virtualenv")
     upgrade_parser.add_argument(
         "--package", "-p", help="name of a packge to install into virtualenv")
+    upgrade_parser.add_argument(
+        "-anb",
+        "--allow-nonbinary",
+        action="store_true",
+        dest="allow_nonbinary",
+        help="If not set, pip will be run with '--only-binary=:all:'")
     upgrade_parser.add_argument(
         "extra_pip_arguments",
         nargs=argparse.REMAINDER,
@@ -513,7 +528,7 @@ def main():
         help="Allow script to write data into the mount")
     run_parser.add_argument(
         "-wf",
-        "--writeable-filesystem",
+        "--writeable-fs",
         action="store_true",
         dest="write_filesystem",
         help="Allow script to write data anywhere in the env's own filesystem")
