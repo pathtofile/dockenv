@@ -222,9 +222,8 @@ def build_venv(args, upgrade=False):
     pip_script = ""
     if args.requirements or args.package:
         pip_script = "RUN pip install --no-cache-dir --user -r requirements.txt"
-
-    if not args.allow_nonbinary:
-        pip_script += " --only-binary=:all:"
+        if not args.allow_nonbinary:
+            pip_script += " --only-binary=:all:"
 
     if args.extra_pip_arguments:
         pip_script += " " + " ".join(args.extra_pip_arguments)

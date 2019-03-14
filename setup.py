@@ -6,7 +6,7 @@ from setuptools import setup
 
 setup(
     name="dockenv",
-    version="1.0.0",
+    version="1.0.1",
     description="Dockenv - Run untrusted Python scripts inside docker containers",
     author="/path/to/file",
     license="MIT",
