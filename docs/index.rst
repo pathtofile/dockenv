@@ -16,8 +16,8 @@ But you might not have the time, or expertise, to fully audit a dependency chain
 just trying out new apps, or using a project to solve a one-time problem. This is where DockEnv
 can help.
 
-DockEnv uses Docker to create a virtual environment image that you can pre-load with one or mode
-packages into. Then, you can execute scripts inside this environment, passing in and out only
+DockEnv uses Docker to create a virtual environment image that you can pre-load with one or more
+packages. Then, you can execute scripts inside this environment, passing in and out only
 text, whilst all code (including the package installation) is only executed inside the container.
 
 
